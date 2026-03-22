@@ -1,5 +1,5 @@
 import Navbar from '@/components/Navbar';
-import { supabase } from '@/lib/supabase/public';
+import { getSupabasePublicClient } from '@/lib/supabase/public';
 import { withTimeout } from '@/lib/performance/query-timeout';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -55,6 +55,7 @@ export default async function CharitiesPage({
   let charityList: Charity[] = FALLBACK_CHARITIES;
 
   try {
+    const supabase = getSupabasePublicClient();
     let request = supabase.from('charities').select('*').order('name');
 
     if (featuredOnly) {

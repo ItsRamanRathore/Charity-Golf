@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/public';
+import { getSupabasePublicClient } from '@/lib/supabase/public';
 import { withTimeout } from '@/lib/performance/query-timeout';
 import Navbar from '@/components/Navbar';
 import Image from 'next/image';
@@ -27,6 +27,7 @@ export default async function CharityProfilePage({
   let charity: CharityProfile | null = null;
 
   try {
+    const supabase = getSupabasePublicClient();
     const result = (await withTimeout(
       supabase
         .from('charities')
