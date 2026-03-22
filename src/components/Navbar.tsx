@@ -1,5 +1,3 @@
-'use client';
-
 import Link from 'next/link';
 
 export default function Navbar() {
@@ -21,10 +19,10 @@ export default function Navbar() {
       </Link>
       
       <div style={{ display: 'flex', gap: '28px', alignItems: 'center', color: 'var(--foreground)' }}>
-        <Link href="/" style={{ fontWeight: 600, color: 'var(--primary)', cursor: 'pointer', textDecoration: 'none', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'} onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}>Home</Link>
-        <Link href="/charities" style={{ fontWeight: 500, opacity: 0.8, cursor: 'pointer', textDecoration: 'none', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '1'} onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}>Charities</Link>
-        <Link href="/draws" style={{ fontWeight: 500, opacity: 0.8, cursor: 'pointer', textDecoration: 'none', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '1'} onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}>Draws</Link>
-        <Link href="/about" style={{ fontWeight: 500, opacity: 0.8, cursor: 'pointer', textDecoration: 'none', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '1'} onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}>About</Link>
+        <Link href="/" className="nav-link nav-link-active">Home</Link>
+        <Link href="/charities" className="nav-link">Charities</Link>
+        <Link href="/draws" className="nav-link">Draws</Link>
+        <Link href="/about" className="nav-link">About</Link>
         
         <Link href="/auth/login" className="btn-secondary" style={{ padding: '8px 16px', fontSize: '14px' }}>
           Login

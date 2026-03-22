@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import { getStripeServerClient } from '@/lib/stripe/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
+import { logServerError, logServerInfo, logServerWarn } from '@/lib/observability/logger';
 
 type SupabaseUpdateResult = Promise<{ error: Error | null }>;
 
@@ -74,6 +75,7 @@ async function syncCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
   const customerId = typeof session.customer === 'string' ? session.customer : null;
   const subscriptionId =
     typeof session.subscription === 'string' ? session.subscription : null;
+  const selectedPlan = session.metadata?.plan === 'yearly' ? 'yearly' : 'monthly';
 
   if (!userId) {
     return;
@@ -85,6 +87,7 @@ async function syncCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
       stripe_customer_id: customerId,
       stripe_subscription_id: subscriptionId,
       subscription_status: 'active',
+      subscription_plan: selectedPlan,
     })
     .eq('id', userId);
 
@@ -94,22 +97,41 @@ async function syncCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
 }
 
 export async function POST(request: Request) {
+  const requestId = crypto.randomUUID();
+
   try {
     const stripe = getStripeServerClient();
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (!webhookSecret) {
-      return new Response('Missing STRIPE_WEBHOOK_SECRET', { status: 500 });
+      logServerError(
+        'stripe.webhook.config.missing_secret',
+        new Error('Missing STRIPE_WEBHOOK_SECRET'),
+        { requestId }
+      );
+      return new Response(JSON.stringify({ error: 'Configuration error', requestId }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     const signature = request.headers.get('stripe-signature');
     if (!signature) {
-      return new Response('Missing stripe-signature', { status: 400 });
+      logServerWarn('stripe.webhook.signature.missing', { requestId });
+      return new Response(JSON.stringify({ error: 'Missing signature', requestId }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     const body = await request.text();
 
     const event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    logServerInfo('stripe.webhook.event.received', {
+      requestId,
+      eventId: event.id,
+      eventType: event.type,
+    });
 
     switch (event.type) {
       case 'checkout.session.completed': {
@@ -123,12 +145,23 @@ export async function POST(request: Request) {
         break;
       }
       default:
+        logServerInfo('stripe.webhook.event.ignored', {
+          requestId,
+          eventId: event.id,
+          eventType: event.type,
+        });
         break;
     }
 
-    return new Response(JSON.stringify({ received: true }), { status: 200 });
+    return new Response(JSON.stringify({ received: true, requestId }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error) {
-    console.error('Stripe webhook error:', error);
-    return new Response('Webhook error', { status: 400 });
+    logServerError('stripe.webhook.handler.failed', error, { requestId });
+    return new Response(JSON.stringify({ error: 'Webhook error', requestId }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

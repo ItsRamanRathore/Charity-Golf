@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { logout } from '../auth/actions';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { withTimeout } from '@/lib/performance/query-timeout';
 
 export default async function DashboardLayout({
   children,
@@ -19,11 +20,37 @@ export default async function DashboardLayout({
     return redirect('/auth/login');
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
+  let profile: { role?: string | null } | null = null;
+
+  try {
+    const byId = (await withTimeout(
+      supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle(),
+      1800,
+      'Dashboard role lookup timeout'
+    )) as unknown as { data: { role?: string | null } | null };
+
+    if (byId.data) {
+      profile = byId.data;
+    } else if (user.email) {
+      const byEmail = (await withTimeout(
+        supabase
+          .from('profiles')
+          .select('role')
+          .eq('email', user.email)
+          .maybeSingle(),
+        1800,
+        'Dashboard role fallback lookup timeout'
+      )) as unknown as { data: { role?: string | null } | null };
+
+      profile = byEmail.data ?? null;
+    }
+  } catch {
+    profile = null;
+  }
 
   const isAdmin = profile?.role === 'admin';
 
@@ -56,6 +83,9 @@ export default async function DashboardLayout({
           <Link href="/dashboard/draws" style={{ padding: '12px 16px', borderRadius: '10px', color: 'var(--muted)' }}>
             Draws
           </Link>
+          <Link href="/dashboard/winnings" style={{ padding: '12px 16px', borderRadius: '10px', color: 'var(--muted)' }}>
+            Winnings
+          </Link>
           <Link href="/dashboard/charity" style={{ padding: '12px 16px', borderRadius: '10px', color: 'var(--muted)' }}>
             My Charity
           </Link>
@@ -63,9 +93,29 @@ export default async function DashboardLayout({
             Subscription
           </Link>
           {isAdmin && (
-            <Link href="/dashboard/admin/draws" style={{ padding: '12px 16px', borderRadius: '10px', color: 'var(--muted)' }}>
-              Admin Draws
-            </Link>
+            <>
+              <div style={{ marginTop: '10px', marginBottom: '6px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.8px', color: 'var(--muted)', textTransform: 'uppercase' }}>
+                Admin Tools
+              </div>
+              <Link href="/dashboard/admin" style={{ padding: '12px 16px', borderRadius: '10px', color: 'var(--muted)' }}>
+                Admin Home
+              </Link>
+              <Link href="/dashboard/admin/draws" style={{ padding: '12px 16px', borderRadius: '10px', color: 'var(--muted)' }}>
+                Draw Management
+              </Link>
+              <Link href="/dashboard/admin/winners" style={{ padding: '12px 16px', borderRadius: '10px', color: 'var(--muted)' }}>
+                Winners
+              </Link>
+              <Link href="/dashboard/admin/users" style={{ padding: '12px 16px', borderRadius: '10px', color: 'var(--muted)' }}>
+                Users
+              </Link>
+              <Link href="/dashboard/admin/charities" style={{ padding: '12px 16px', borderRadius: '10px', color: 'var(--muted)' }}>
+                Charities
+              </Link>
+              <Link href="/dashboard/admin/reports" style={{ padding: '12px 16px', borderRadius: '10px', color: 'var(--muted)' }}>
+                Reports
+              </Link>
+            </>
           )}
         </nav>
 
@@ -83,6 +133,25 @@ export default async function DashboardLayout({
 
       {/* Main Content */}
       <main style={{ flexGrow: 1, padding: '40px 5%', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+          <form action={logout}>
+            <button
+              type="submit"
+              style={{
+                color: '#EF4444',
+                fontSize: '13px',
+                fontWeight: 600,
+                background: 'white',
+                border: '1px solid rgba(239,68,68,0.3)',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                padding: '8px 12px'
+              }}
+            >
+              Logout
+            </button>
+          </form>
+        </div>
         {children}
       </main>
     </div>

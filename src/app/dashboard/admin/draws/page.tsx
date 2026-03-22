@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
+import { withTimeout } from '@/lib/performance/query-timeout';
 import { redirect } from 'next/navigation';
-import { assignWinner, createDraw, publishDraw } from './actions';
+import { assignWinner, createDraw, publishDraw, simulateDraw } from './actions';
 
 type DrawRow = {
   id: string;
@@ -9,6 +10,9 @@ type DrawRow = {
   status: string;
   prize_pool: number;
   numbers: number[];
+  simulated_at?: string | null;
+  simulation_summary?: { generatedAt?: string; tierShares?: { tier5?: number; tier4?: number; tier3?: number } } | null;
+  jackpot_rollover_amount?: number | null;
 };
 
 type UserRow = {
@@ -47,42 +51,36 @@ export default async function AdminDrawsPage({
   let userRows: UserRow[] = [];
 
   try {
-    const drawsFetchPromise = supabase
-      .from('draws')
-      .select('id, draw_date, type, status, prize_pool, numbers')
-      .order('draw_date', { ascending: false })
-      .limit(20);
+    const [drawsResult, usersResult] = await Promise.all([
+      withTimeout(
+        supabase
+          .from('draws')
+          .select('id, draw_date, type, status, prize_pool, numbers, simulated_at, simulation_summary, jackpot_rollover_amount')
+          .order('draw_date', { ascending: false })
+          .limit(20),
+        1800,
+        'Admin draws query timeout'
+      ),
+      withTimeout(
+        supabase
+          .from('profiles')
+          .select('id, email')
+          .order('created_at', { ascending: false })
+          .limit(100),
+        1800,
+        'Admin users query timeout'
+      ),
+    ]);
 
-    const drawsTimeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Query timeout')), 5000)
-    );
+    const typedDrawsResult = drawsResult as unknown as { data: DrawRow[] | null };
+    const typedUsersResult = usersResult as unknown as { data: UserRow[] | null };
 
-    const drawsResult = (await Promise.race([
-      drawsFetchPromise,
-      drawsTimeoutPromise as unknown as Promise<typeof drawsFetchPromise>,
-    ])) as unknown as { data: DrawRow[] | null };
-
-    if (drawsResult.data) {
-      drawRows = drawsResult.data as DrawRow[];
+    if (typedDrawsResult.data) {
+      drawRows = typedDrawsResult.data as DrawRow[];
     }
 
-    const usersFetchPromise = supabase
-      .from('profiles')
-      .select('id, email')
-      .order('created_at', { ascending: false })
-      .limit(100);
-
-    const usersTimeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Query timeout')), 5000)
-    );
-
-    const usersResult = (await Promise.race([
-      usersFetchPromise,
-      usersTimeoutPromise as unknown as Promise<typeof usersFetchPromise>,
-    ])) as unknown as { data: UserRow[] | null };
-
-    if (usersResult.data) {
-      userRows = usersResult.data as UserRow[];
+    if (typedUsersResult.data) {
+      userRows = typedUsersResult.data as UserRow[];
     }
   } catch (fetchError) {
     console.error('Error fetching admin draw data:', fetchError);
@@ -134,6 +132,9 @@ export default async function AdminDrawsPage({
             <label style={{ fontSize: '13px', color: 'var(--muted)' }}>
               Winning Numbers (comma-separated)
               <input type="text" name="numbers" placeholder="4, 11, 18, 22, 39" style={{ width: '100%', marginTop: '4px', padding: '10px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.1)' }} />
+              <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '6px' }}>
+                Leave blank for random draws to auto-generate 5 numbers.
+              </div>
             </label>
 
             <button className="btn-primary" type="submit" style={{ justifyContent: 'center' }}>Create Draw</button>
@@ -198,17 +199,38 @@ export default async function AdminDrawsPage({
                 <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
                   Type: {draw.type} | Status: {draw.status} | Pool: ${draw.prize_pool}
                 </div>
+                {draw.simulated_at && (
+                  <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                    Simulated: {new Date(draw.simulated_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                  </div>
+                )}
+                {draw.simulation_summary?.tierShares && (
+                  <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                    Sim Pool Split: 5-match ${draw.simulation_summary.tierShares.tier5 || 0} | 4-match ${draw.simulation_summary.tierShares.tier4 || 0} | 3-match ${draw.simulation_summary.tierShares.tier3 || 0}
+                  </div>
+                )}
+                {!!draw.jackpot_rollover_amount && draw.jackpot_rollover_amount > 0 && (
+                  <div style={{ fontSize: '12px', color: '#B45309' }}>
+                    Jackpot rollover applied: ${draw.jackpot_rollover_amount}
+                  </div>
+                )}
                 <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
                   Numbers: {(draw.numbers || []).join(', ') || 'Not set'}
                 </div>
               </div>
 
-              {draw.status !== 'published' && (
-                <form action={publishDraw}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <form action={simulateDraw}>
                   <input type="hidden" name="drawId" value={draw.id} />
-                  <button className="btn-secondary" type="submit">Publish</button>
+                  <button className="btn-secondary" type="submit">Simulate</button>
                 </form>
-              )}
+                {draw.status !== 'published' && (
+                  <form action={publishDraw}>
+                    <input type="hidden" name="drawId" value={draw.id} />
+                    <button className="btn-primary" type="submit">Publish</button>
+                  </form>
+                )}
+              </div>
             </div>
           ))}
 

@@ -32,7 +32,7 @@ const statusConfig: Record<string, { label: string; color: string; bg: string; h
 export default async function DashboardSubscriptionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; checkout?: string }>;
+  searchParams: Promise<{ error?: string; checkout?: string; plan?: string }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -48,11 +48,13 @@ export default async function DashboardSubscriptionPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('subscription_status, updated_at, stripe_customer_id, stripe_subscription_id')
+    .select('subscription_status, subscription_plan, updated_at, stripe_customer_id, stripe_subscription_id')
     .eq('id', user.id)
     .single();
 
   const subscriptionStatus = profile?.subscription_status ?? 'inactive';
+  const paramPlan = params.plan === 'yearly' ? 'yearly' : params.plan === 'monthly' ? 'monthly' : null;
+  const subscriptionPlan = paramPlan ?? profile?.subscription_plan ?? 'monthly';
   const card = statusConfig[subscriptionStatus] ?? statusConfig.inactive;
 
   return (
@@ -103,6 +105,7 @@ export default async function DashboardSubscriptionPage({
 
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '18px' }}>
           <form action={startCheckout}>
+            <input type="hidden" name="plan" value={subscriptionPlan} />
             <button className="btn-primary" type="submit">Start Subscription Checkout</button>
           </form>
 
@@ -125,7 +128,7 @@ export default async function DashboardSubscriptionPage({
           </div>
           <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(0,0,0,0.03)' }}>
             <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Billing Cycle</div>
-            <div style={{ fontWeight: 700 }}>Monthly</div>
+            <div style={{ fontWeight: 700, textTransform: 'capitalize' }}>{subscriptionPlan}</div>
           </div>
           <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(0,0,0,0.03)' }}>
             <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Last Profile Update</div>
@@ -147,6 +150,23 @@ export default async function DashboardSubscriptionPage({
         <p style={{ color: 'var(--muted)', fontSize: '13px' }}>
           Billing lifecycle is synced via Stripe webhooks into profile subscription fields.
         </p>
+
+        <div style={{ marginTop: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <a
+            href="/dashboard/subscription?plan=monthly"
+            className="btn-secondary"
+            style={{ padding: '8px 12px', fontSize: '12px' }}
+          >
+            Monthly Plan
+          </a>
+          <a
+            href="/dashboard/subscription?plan=yearly"
+            className="btn-secondary"
+            style={{ padding: '8px 12px', fontSize: '12px' }}
+          >
+            Yearly Plan
+          </a>
+        </div>
       </div>
     </div>
   );

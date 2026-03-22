@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
+import { withTimeout } from '@/lib/performance/query-timeout';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -11,27 +13,56 @@ export default async function DashboardPage() {
   }
 
   let profile = null;
+  let winningsTotal = 0;
+  let pendingPayoutAmount = 0;
+  let drawsEntered = 0;
 
   try {
-    const fetchPromise = supabase
-      .from('profiles')
-      .select('*, charities(name)')
-      .eq('id', user.id)
-      .single();
-
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Query timeout')), 5000)
-    );
-
-    const result = (await Promise.race([
-      fetchPromise,
-      timeoutPromise as unknown as Promise<unknown>,
-    ])) as unknown as { data: { full_name?: string; role?: string; charity_percentage?: number; charities?: { name: string }; subscription_status?: string } | null };
+    const result = (await withTimeout(
+      supabase
+        .from('profiles')
+        .select('*, charities(name)')
+        .eq('id', user.id)
+        .single(),
+      3500,
+      'Dashboard profile query timeout'
+    )) as unknown as { data: { full_name?: string; role?: string; charity_percentage?: number; charities?: { name: string }; subscription_status?: string } | null };
 
     profile = result.data || null;
-  } catch (fetchError) {
-    console.error('Error fetching profile:', fetchError);
+  } catch {
     profile = null;
+  }
+
+  try {
+    const [winnersResult, drawsResult] = await Promise.all([
+      withTimeout(
+        supabase
+          .from('winners')
+          .select('prize_amount, status')
+          .eq('user_id', user.id),
+        1800,
+        'Dashboard winners query timeout'
+      ),
+      withTimeout(
+        supabase
+          .from('draws')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'published'),
+        1800,
+        'Dashboard draws count query timeout'
+      ),
+    ]);
+
+    const winnerRows = (winnersResult as unknown as { data: Array<{ prize_amount: number; status: string }> | null }).data || [];
+    winningsTotal = winnerRows.reduce((sum, row) => sum + Number(row.prize_amount || 0), 0);
+    pendingPayoutAmount = winnerRows
+      .filter((row) => row.status !== 'paid')
+      .reduce((sum, row) => sum + Number(row.prize_amount || 0), 0);
+    drawsEntered = (drawsResult as unknown as { count?: number | null }).count || 0;
+  } catch {
+    winningsTotal = 0;
+    pendingPayoutAmount = 0;
+    drawsEntered = 0;
   }
 
   const fullName = profile?.full_name || user.email?.split('@')[0] || 'User';
@@ -67,15 +98,15 @@ export default async function DashboardPage() {
       }}>
         <div className="glass" style={{ padding: '24px' }}>
           <div style={{ color: 'var(--muted)', fontSize: '14px', marginBottom: '8px' }}>Total Winnings</div>
-          <div style={{ fontSize: '36px', fontWeight: 800 }}>$0</div>
-          <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px' }}>No draws entered yet</div>
+          <div style={{ fontSize: '36px', fontWeight: 800 }}>INR {winningsTotal.toLocaleString('en-IN')}</div>
+          <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px' }}>Pending payout: INR {pendingPayoutAmount.toLocaleString('en-IN')}</div>
         </div>
 
         <div className="glass" style={{ padding: '24px' }}>
           <div style={{ color: 'var(--muted)', fontSize: '14px', marginBottom: '8px' }}>Active Pool</div>
           <div style={{ fontSize: '36px', fontWeight: 800 }}>{isActiveSubscriber ? '$14,580' : 'Locked'}</div>
           <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px' }}>
-            {isActiveSubscriber ? 'Ends in 12 days' : 'Activate subscription to enter draw pool'}
+            {isActiveSubscriber ? `${drawsEntered} published draws tracked` : 'Activate subscription to enter draw pool'}
           </div>
         </div>
 
@@ -112,6 +143,19 @@ export default async function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {role === 'admin' && (
+        <div className="glass" style={{ marginTop: '24px', padding: '24px', background: 'white' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '10px' }}>Admin Quick Actions</h2>
+          <p style={{ color: 'var(--muted)', fontSize: '14px', marginBottom: '16px' }}>
+            You are signed in as admin. Use these controls for platform operations.
+          </p>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <Link href="/dashboard/admin" className="btn-secondary">Admin Home</Link>
+            <Link href="/dashboard/admin/draws" className="btn-primary">Manage Draws</Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

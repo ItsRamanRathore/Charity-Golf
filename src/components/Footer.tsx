@@ -1,5 +1,3 @@
-'use client';
-
 import Link from 'next/link';
 
 export default function Footer() {
@@ -19,51 +17,16 @@ export default function Footer() {
           <div>
             <h4 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '16px', color: 'white' }}>Platform</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px' }}>
-              <Link 
-                href="/charities" 
-                style={{ color: '#9CA3AF', cursor: 'pointer', textDecoration: 'none', transition: 'color 0.2s' }} 
-                onMouseEnter={(e) => e.currentTarget.style.color = '#F3F4F6'} 
-                onMouseLeave={(e) => e.currentTarget.style.color = '#9CA3AF'}
-              >
-                Charities
-              </Link>
-              <Link 
-                href="/draws" 
-                style={{ color: '#9CA3AF', cursor: 'pointer', textDecoration: 'none', transition: 'color 0.2s' }} 
-                onMouseEnter={(e) => e.currentTarget.style.color = '#F3F4F6'} 
-                onMouseLeave={(e) => e.currentTarget.style.color = '#9CA3AF'}
-              >
-                Draws
-              </Link>
-              <Link 
-                href="/about" 
-                style={{ color: '#9CA3AF', cursor: 'pointer', textDecoration: 'none', transition: 'color 0.2s' }} 
-                onMouseEnter={(e) => e.currentTarget.style.color = '#F3F4F6'} 
-                onMouseLeave={(e) => e.currentTarget.style.color = '#9CA3AF'}
-              >
-                About Us
-              </Link>
+              <Link href="/charities" className="footer-link">Charities</Link>
+              <Link href="/draws" className="footer-link">Draws</Link>
+              <Link href="/about" className="footer-link">About Us</Link>
             </div>
           </div>
           <div>
             <h4 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '16px', color: 'white' }}>Legal</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px' }}>
-              <Link 
-                href="/privacy" 
-                style={{ color: '#9CA3AF', cursor: 'pointer', textDecoration: 'none', transition: 'color 0.2s' }} 
-                onMouseEnter={(e) => e.currentTarget.style.color = '#F3F4F6'} 
-                onMouseLeave={(e) => e.currentTarget.style.color = '#9CA3AF'}
-              >
-                Privacy Policy
-              </Link>
-              <Link 
-                href="/terms" 
-                style={{ color: '#9CA3AF', cursor: 'pointer', textDecoration: 'none', transition: 'color 0.2s' }} 
-                onMouseEnter={(e) => e.currentTarget.style.color = '#F3F4F6'} 
-                onMouseLeave={(e) => e.currentTarget.style.color = '#9CA3AF'}
-              >
-                Terms Of Service
-              </Link>
+              <Link href="/privacy" className="footer-link">Privacy Policy</Link>
+              <Link href="/terms" className="footer-link">Terms Of Service</Link>
             </div>
           </div>
         </div>

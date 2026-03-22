@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
+import { withTimeout } from '@/lib/performance/query-timeout';
 import { redirect } from 'next/navigation';
-import { submitScore } from './actions';
+import { editScore, submitScore } from './actions';
 
 type Score = {
   id: string;
@@ -28,22 +29,17 @@ export default async function ScoresPage({
   let scores: Score[] = [];
 
   try {
-    const fetchPromise = supabase
-      .from('scores')
-      .select('id, score, score_date')
-      .eq('user_id', user.id)
-      .order('score_date', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(5);
-
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Query timeout')), 5000)
-    );
-
-    const result = (await Promise.race([
-      fetchPromise,
-      timeoutPromise as unknown as Promise<unknown>,
-    ])) as unknown as { data: Score[] | null };
+    const result = (await withTimeout(
+      supabase
+        .from('scores')
+        .select('id, score, score_date')
+        .eq('user_id', user.id)
+        .order('score_date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(5),
+      1800,
+      'Scores query timeout'
+    )) as unknown as { data: Score[] | null };
 
     scores = (result.data ?? []) as Score[];
   } catch (fetchError) {
@@ -124,8 +120,31 @@ export default async function ScoresPage({
                     <div style={{ fontWeight: 600, fontSize: '18px' }}>{scoreEntry.score} Points</div>
                     <div style={{ fontSize: '12px', color: 'var(--muted)' }}>{scoreEntry.score_date}</div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ fontSize: '12px', padding: '4px 8px', borderRadius: '6px', background: 'rgba(16,185,129,0.1)', color: 'var(--accent)' }}>Stableford</span>
+                    <details>
+                      <summary style={{ cursor: 'pointer', fontSize: '12px', color: 'var(--primary)', fontWeight: 600 }}>Edit</summary>
+                      <form action={editScore} style={{ display: 'grid', gap: '8px', marginTop: '8px', minWidth: '180px' }}>
+                        <input type="hidden" name="scoreId" value={scoreEntry.id} />
+                        <input
+                          type="number"
+                          name="score"
+                          defaultValue={scoreEntry.score}
+                          min="1"
+                          max="45"
+                          required
+                          style={{ padding: '8px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.1)' }}
+                        />
+                        <input
+                          type="date"
+                          name="scoreDate"
+                          defaultValue={scoreEntry.score_date}
+                          required
+                          style={{ padding: '8px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.1)' }}
+                        />
+                        <button type="submit" className="btn-secondary" style={{ padding: '8px 10px', fontSize: '12px' }}>Save</button>
+                      </form>
+                    </details>
                   </div>
                 </div>
               ))}

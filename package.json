@@ -4,10 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:stable": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "check:migrations": "node scripts/check-migrations.mjs"
+    "check:migrations": "node scripts/check-migrations.mjs",
+    "admin:upsert": "node scripts/upsert-admin.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.9.0",
