@@ -1,36 +1,160 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Digital Heroes
 
-## Getting Started
+Digital Heroes is a Next.js 16 application for golf-score tracking, monthly draw participation, and charity impact visibility.
 
-First, run the development server:
+## Tech Stack
+
+- Next.js 16 App Router
+- React 19 + TypeScript
+- Supabase (auth + database)
+- ESLint 9
+
+## Production-Ready Folder Layout
+
+```text
+database/
+	schema.sql
+public/
+src/
+	app/
+	components/
+	lib/
+		supabase/
+			proxy.ts
+			public.ts
+			server.ts
+	proxy.ts
+```
+
+## Setup
+
+1. Copy environment template:
+
+```bash
+cp .env.example .env.local
+```
+
+2. Fill required values in `.env.local`.
+
+3. Install dependencies:
+
+```bash
+npm install
+```
+
+4. Start development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Database
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Canonical schema location: `database/schema.sql`
+- Versioned migrations: `database/migrations/`
+- Apply schema to your Supabase/Postgres instance using your preferred migration workflow.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Migration Workflow
 
-## Learn More
+1. Add a new SQL file under `database/migrations/` with a sortable timestamp prefix.
+2. Keep all RLS/policy adjustments additive and idempotent (`DROP POLICY IF EXISTS`, `CREATE POLICY`).
+3. Apply migration in staging first, then production.
+4. Verify dashboard auth and protected routes after each migration.
 
-To learn more about Next.js, take a look at the following resources:
+Latest hardening migration:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `database/migrations/20260322_phase2_security_hardening.sql`
+- `database/migrations/20260322_phase2_billing_profile_fields.sql`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Billing (Stripe)
 
-## Deploy on Vercel
+Required environment variables:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_ID`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `NEXT_PUBLIC_APP_URL`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Webhook endpoint:
+
+- `POST /api/stripe/webhook`
+
+During local development, forward Stripe events to this endpoint and copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
+
+### Local Stripe Setup (All 3 Steps)
+
+1. Set all billing env variables in `.env.local`:
+	- `STRIPE_SECRET_KEY`
+	- `STRIPE_WEBHOOK_SECRET`
+	- `STRIPE_PRICE_ID`
+	- `SUPABASE_SERVICE_ROLE_KEY`
+	- `NEXT_PUBLIC_APP_URL`
+
+2. Forward webhook events to local app and copy generated secret:
+
+```bash
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+```
+
+3. Create a recurring price and copy resulting `price_...` into `STRIPE_PRICE_ID`:
+
+```bash
+stripe products create --name "Digital Heroes Standard"
+stripe prices create --unit-amount 1999 --currency usd --recurring interval=month --product <prod_id>
+```
+
+## Admin Operations
+
+- Admin draw management route: `/dashboard/admin/draws`
+- Admin-only actions supported:
+	- Create draw
+	- Publish draw
+	- Assign winner record
+
+## Quality Checks
+
+```bash
+npm run lint
+npm run build
+```
+
+## CI/CD and Deployment (Phase 4b)
+
+This repository includes two GitHub Actions workflows:
+
+- CI validation: `.github/workflows/ci.yml`
+- Production deployment to Vercel: `.github/workflows/deploy.yml`
+
+### Required GitHub Secrets
+
+Configure these in your GitHub repository settings.
+
+- `VERCEL_TOKEN`
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
+
+Also configure production app secrets in Vercel project settings.
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `DATABASE_URL`
+- `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_ID`
+
+### Deployment Flow
+
+1. Push to `main` or `master`.
+2. GitHub Actions runs lint, migration checks, and production build.
+3. If checks pass, workflow deploys prebuilt artifacts to Vercel production.
+
+## Notes
+
+- Do not commit `.env.local` or credentials.
+- Keep security-sensitive logic in server actions and server components.
+- Use `src/lib/supabase/server.ts` for authenticated server-side database operations.
